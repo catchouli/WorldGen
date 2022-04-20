@@ -4,7 +4,22 @@
     ViewData["Title"] = "Home page";
 }
 
-<div class="text-center">
-    <h1 class="display-4">Welcome</h1>
-    <p>Learn about <a href="https://docs.microsoft.com/aspnet/core">building Web apps with ASP.NET Core</a>.</p>
-</div>
+<script src="lib/threejs/three.js"></script>
+<script src="lib/threejs/GLTFLoader.js"></script>
+<script src="lib/threejs/PointerLockControls.js"></script>
+<script src="lib/threejs/Sky.js"></script>
+<script src="lib/threejs/lil-gui.umd.min.js"></script>
+<script src="js/Blockhaus.js"></script>
+<script>
+  document.blockhaus = new Blockhaus();
+
+  function animate()
+  {
+    requestAnimationFrame(animate);
+
+    document.blockhaus.update();
+    document.blockhaus.render();
+  }
+
+  requestAnimationFrame(animate);
+</script>
