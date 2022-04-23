@@ -1,4 +1,4 @@
-﻿using MapGenTestApp.Voronoi;
+﻿using Algorithms.Voronoi;
 using System.Numerics;
 
 namespace MapGenTestApp

@@ -12,7 +12,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Math\Math.csproj" />
+    <ProjectReference Include="..\Algorithms\Algorithms.csproj" />
   </ItemGroup>
 
 </Project>

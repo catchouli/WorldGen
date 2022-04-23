@@ -4,7 +4,7 @@ using SixLabors.ImageSharp.Processing;
 using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.Drawing;
 using System.Numerics;
-using MapGenTestApp.Voronoi;
+using Algorithms.Voronoi;
 
 namespace MapGenTestApp
 {
@@ -69,7 +69,8 @@ namespace MapGenTestApp
       //map.Points.AddRange(new[] { new Vector2(232, 79), /*new Vector2(610, 79),*/ new Vector2(939, 210), new Vector2(316, 273), new Vector2(693, 364), new Vector2(1012, 454), new Vector2(394, 485), new Vector2(131, 615), new Vector2(754, 639) });
 
       // Generate voronoi diagram
-      map.Voronoi = FortunesAlgorithm.Generate(map.Points, new Vector4(0.0f, 0.0f, (float)Width, (float)Height));
+      var fortune = new FortunesAlgorithm();
+      map.Voronoi = fortune.GenerateDiagram(map.Points, new Vector4(0.0f, 0.0f, (float)Width, (float)Height));
 
       return map;
     }
@@ -96,7 +97,7 @@ namespace MapGenTestApp
       }
 
       // Render voronoi diagram
-      var orangePen = Pens.Solid(Color.Orange, 3.0f);
+      var orangePen = Pens.Solid(Color.Orange, 10.0f);
       foreach (var edge in map.Voronoi.Edges)
       {
         image.Mutate(x => x.DrawLines(orangePen, new PointF(edge.a.Position.X, edge.a.Position.Y), new PointF(edge.b.Position.X, edge.b.Position.Y)));

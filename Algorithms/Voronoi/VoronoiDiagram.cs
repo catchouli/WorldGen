@@ -1,6 +1,6 @@
 ﻿using System.Numerics;
 
-namespace MapGenTestApp.Voronoi
+namespace Algorithms.Voronoi
 {
   /// <summary>
   /// Class that represents a voronoi diagram
