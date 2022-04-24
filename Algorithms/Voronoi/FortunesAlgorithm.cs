@@ -178,13 +178,13 @@ namespace Algorithms.Voronoi
     }
 
     /// <inheritdoc/>
-    public VoronoiDiagram GenerateDiagram(ISet<Vector2> points, Vector4 extents)
+    public VoronoiDiagram GenerateDiagram(ISet<Vector2> sites, Vector4 extents)
     {
-      if (!points.Any())
+      if (!sites.Any())
         throw new ArgumentException("Points contained no items");
 
       // Build queue of site events
-      var siteEvents = points.Select(x => (new SiteEvent(x) as IEvent, x.Y));
+      var siteEvents = sites.Select(x => (new SiteEvent(x) as IEvent, x.Y));
       var events = new PriorityQueue<IEvent, float>(siteEvents);
 
       // Create beach line, the list in inefficient but it seems fast enough for now. The annoying thing about it is
@@ -254,10 +254,10 @@ namespace Algorithms.Voronoi
 
       // Draw final debug view
       if (_debugDraw)
-        DrawBeachLine("diagram.png", (int)extents.Z, (int)extents.W, 0, points, beachLine, completedEdges);
+        DrawBeachLine("diagram.png", (int)extents.Z, (int)extents.W, 0, sites, beachLine, completedEdges);
 
       // Convert to a VoronoiDiagram and return
-      return ConvertToResult(completedEdges, extents);
+      return ConvertToResult(completedEdges, sites, extents);
     }
 
     /// <summary>
@@ -323,8 +323,7 @@ namespace Algorithms.Voronoi
       int insertPos = arcAbovePos;
       if (TryGetParabolaY(siteEvent.Position.X, arcAbove.Focus, siteEvent.Position.Y, out var intersectionY))
       {
-        // Create new arcs (we reuse arcAbove as the left arc)
-        var leftArc = new Arc(arcAbove.Focus);
+        // Create new arcs
         var newArc = new Arc(siteEvent.Position);
         var rightArc = new Arc(arcAbove.Focus);
 
@@ -339,8 +338,6 @@ namespace Algorithms.Voronoi
 
         // Insert (after arcAbove, which is the left side of the split arc) the sequence:
         // leftSplit, leftEdge, newArc, rightEdge, rightSplit
-        beachLine.RemoveAt(insertPos);
-        beachLine.Insert(insertPos, leftArc);
         beachLine.Insert(++insertPos, leftEdge);
         beachLine.Insert(++insertPos, newArc);
         beachLine.Insert(++insertPos, rightEdge);
@@ -358,6 +355,13 @@ namespace Algorithms.Voronoi
 
         beachLine.Insert(++insertPos, newEdge);
         beachLine.Insert(++insertPos, newArc);
+      }
+
+      // Since we reused arcAbove as leftArc we should reset its VertexEvent if there is one
+      if (arcAbove.VertexEvent != null)
+      {
+        arcAbove.VertexEvent.IsValid = false;
+        arcAbove.VertexEvent = null;
       }
 
       // Return new vertex events
@@ -407,6 +411,7 @@ namespace Algorithms.Voronoi
       var edgeA = ClampEdge(new CompletedEdge(leftEdge.Start, vertexEvent.IntersectionPoint), extents);
       var edgeB = ClampEdge(new CompletedEdge(vertexEvent.IntersectionPoint, rightEdge.Start), extents);
 
+      bool isNan = float.IsNaN(edgeA.Start.X) || float.IsNaN(edgeA.Start.Y) || float.IsNaN(edgeB.Start.X) || float.IsNaN(edgeB.Start.Y);
       // Filter out 0-length edges
       if (edgeA.Start != edgeA.End)
         completedEdges.Add(edgeA);
@@ -459,9 +464,11 @@ namespace Algorithms.Voronoi
     /// Convert our generated edges into the result type VoronoiDiagram
     /// </summary>
     /// <param name="completedEdges">The generated edges</param>
+    /// <param name="sites">The input istes</param>
     /// <param name="extents">The extents</param>
     /// <returns>The generated Voronoi Diagram</returns>
-    private static VoronoiDiagram ConvertToResult(List<CompletedEdge> completedEdges, Vector4 extents)
+    private static VoronoiDiagram ConvertToResult(List<CompletedEdge> completedEdges, ISet<Vector2> sites,
+      Vector4 extents)
     {
       var vertices = new Dictionary<Vector2, VoronoiDiagram.Vertex>();
       var edges = new List<VoronoiDiagram.Edge>();
@@ -693,6 +700,13 @@ namespace Algorithms.Voronoi
     /// <returns>The index of the arc in the beach line which is above the given x coordinate</returns>
     private static int FindArcAbove(List<IBeachLineItem> beachLine, float x, float sweepPos)
     {
+      // An epsilon for detecting parabolas with a focus almost exactly on the sweep line and handling them specially.
+      // This needs to be tuned as without it points too close together start to lose precision with the parabola's
+      // coordinates. But going too far in the other direction introduces false positives which cause a similar
+      // problem. If the conditions below throw an InternalErrorException then this needs to be increased, but it may
+      // start introducing error itself.
+      const float SweepLineEpsilon = 1e-3f;
+
       // Should never happen because we add an item to the beachline at the start
       if (beachLine.Count == 0)
         throw new InvalidOperationException("Beachline should never be empty");
@@ -715,8 +729,12 @@ namespace Algorithms.Voronoi
             var edgeBefore = beachLine[curPos - 1] as HalfEdge;
             Debug.Assert(edgeBefore != null);
 
-            if (TryIntersectArcHalfEdge(curArc, edgeBefore, sweepPos, out var prevIntersection))
+            if (Comparison.ApproxEquals(curArc.Focus.Y, sweepPos, SweepLineEpsilon))
+              arcMin = curArc.Focus.X;
+            else if (TryIntersectArcHalfEdge(curArc, edgeBefore, sweepPos, out var prevIntersection))
               arcMin = prevIntersection.X;
+            else
+              throw new InternalErrorException("(probably precision error)");
           }
 
           // If this isn't the last arc, there'll be an edge after that we can use to get arcMax
@@ -726,8 +744,12 @@ namespace Algorithms.Voronoi
             var edgeAfter = beachLine[curPos + 1] as HalfEdge;
             Debug.Assert(edgeAfter != null);
 
-            if (TryIntersectArcHalfEdge(curArc, edgeAfter, sweepPos, out var nextIntersection))
+            if (Comparison.ApproxEquals(curArc.Focus.Y, sweepPos, SweepLineEpsilon))
+              arcMax = curArc.Focus.X;
+            else if (TryIntersectArcHalfEdge(curArc, edgeAfter, sweepPos, out var nextIntersection))
               arcMax = nextIntersection.X;
+            else
+              throw new InternalErrorException("(probably precision error)");
           }
 
           // If this x lies between arcMin and arcMax, this is the right arc

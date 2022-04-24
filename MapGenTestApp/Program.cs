@@ -26,7 +26,7 @@ namespace MapGenTestApp
     /// <summary>
     /// The random number generator
     /// </summary>
-    private static Random _rng = new Random(10);
+    private static Random _rng = new Random(117);
 
     /// <summary>
     /// Main
@@ -38,7 +38,7 @@ namespace MapGenTestApp
       // Render map
       var mapOptions = new MapOptions
       {
-        PointCount = 1000
+        PointCount = 3000
       };
 
       var map = GenerateMap(mapOptions);

@@ -25,6 +25,11 @@ namespace Algorithms.Voronoi
     }
 
     /// <summary>
+    /// The sites used to generate the diagram
+    /// </summary>
+    public Vector2[] Sites;
+
+    /// <summary>
     /// The vertices in the diagram
     /// </summary>
     public Vertex[] Vertices;
