@@ -42,7 +42,7 @@ namespace MapGenTestApp
       // Render map
       var mapOptions = new MapOptions
       {
-        PointCount = 100
+        PointCount = 10000
       };
 
       var map = GenerateMap(mapOptions);
@@ -63,13 +63,17 @@ namespace MapGenTestApp
         map.Points.Add(new Vector2(_rng.NextSingle() * (float)Width, _rng.NextSingle() * (float)Height));
       }
 
-      // Add test points
+      // same Y edge case
       //map.Points.Clear();
-      // TODO: reenable this edge case
-      //map.Points.AddRange(new[] { new Vector2(232, 79), /*new Vector2(610, 79),*/ new Vector2(939, 210), new Vector2(316, 273), new Vector2(693, 364), new Vector2(1012, 454), new Vector2(394, 485), new Vector2(131, 615), new Vector2(754, 639) });
+      //map.Points = new List<Vector2>
+      //{
+        //new Vector2(232, 79), new Vector2(610, 79), new Vector2(939, 210), new Vector2(316, 273),
+        //new Vector2(693, 364), new Vector2(1012, 454), new Vector2(394, 485), new Vector2(131, 615),
+        //new Vector2(754, 639)
+      //};
 
       // Generate voronoi diagram
-      var fortune = new FortunesAlgorithm();
+      var fortune = new FortunesAlgorithm(true);
       map.Voronoi = fortune.GenerateDiagram(map.Points, new Vector4(0.0f, 0.0f, (float)Width, (float)Height));
 
       return map;
@@ -101,6 +105,11 @@ namespace MapGenTestApp
       foreach (var edge in map.Voronoi.Edges)
       {
         image.Mutate(x => x.DrawLines(orangePen, new PointF(edge.a.Position.X, edge.a.Position.Y), new PointF(edge.b.Position.X, edge.b.Position.Y)));
+      }
+      foreach (var vertex in map.Voronoi.Vertices)
+      {
+        var point = new PointF(vertex.Position.X, vertex.Position.Y);
+        image.Mutate(x => x.DrawLines(Pens.Solid(Color.Green, 6.0f), point, point));
       }
 
       // Save image

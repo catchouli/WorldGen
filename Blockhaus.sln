@@ -19,6 +19,8 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "MapGenTestApp", "MapGenTest
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Algorithms", "Algorithms\Algorithms.csproj", "{29D320AB-E903-4390-B46D-E4626C061412}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Algorithms.Test", "Algorithms.Test\Algorithms.Test.csproj", "{4A4E38B8-8D66-448D-AF84-39CB9E7E92E6}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -49,6 +51,10 @@ Global
 		{29D320AB-E903-4390-B46D-E4626C061412}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{29D320AB-E903-4390-B46D-E4626C061412}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{29D320AB-E903-4390-B46D-E4626C061412}.Release|Any CPU.Build.0 = Release|Any CPU
+		{4A4E38B8-8D66-448D-AF84-39CB9E7E92E6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4A4E38B8-8D66-448D-AF84-39CB9E7E92E6}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4A4E38B8-8D66-448D-AF84-39CB9E7E92E6}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4A4E38B8-8D66-448D-AF84-39CB9E7E92E6}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -59,6 +65,7 @@ Global
 		{2404FFE6-FE71-4325-93B2-0163AB8C1C10} = {B5A72329-1A5B-4A1E-BB26-CED7A0EB447E}
 		{1ACA0647-A4B7-479B-AF3F-FD29AE238C32} = {CFE96834-4238-426A-808B-7671840A2617}
 		{29D320AB-E903-4390-B46D-E4626C061412} = {B5A72329-1A5B-4A1E-BB26-CED7A0EB447E}
+		{4A4E38B8-8D66-448D-AF84-39CB9E7E92E6} = {B5A72329-1A5B-4A1E-BB26-CED7A0EB447E}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {5F7B06C8-2A75-44A8-9E7E-223D3D89651C}

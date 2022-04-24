@@ -13,7 +13,7 @@ namespace Algorithms.Voronoi
     public class Vertex
     {
       public Vector2 Position;
-      public List<Edge> Edges = new List<Edge>();
+      public HashSet<Edge> Edges = new HashSet<Edge>();
     }
 
     /// <summary>

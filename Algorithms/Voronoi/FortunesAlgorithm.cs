@@ -1,5 +1,4 @@
-﻿using SixLabors.ImageSharp;
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Numerics;
 using Utils;
 
@@ -164,6 +163,20 @@ namespace Algorithms.Voronoi
       }
     }
 
+    /// <summary>
+    /// Whether to enable debug drawing
+    /// </summary>
+    private bool _debugDraw = false;
+
+    /// <summary>
+    /// Create a new instance of FortunesAlogrithm
+    /// </summary>
+    /// <param name="debugDraw">Whether to enable debug drawing</param>
+    public FortunesAlgorithm(bool debugDraw)
+    {
+      _debugDraw = debugDraw;
+    }
+
     /// <inheritdoc/>
     public VoronoiDiagram GenerateDiagram(IEnumerable<Vector2> points, Vector4 extents)
     {
@@ -191,7 +204,7 @@ namespace Algorithms.Voronoi
         // Handle site events
         if (evt is SiteEvent siteEvent)
         {
-          var (leftVertexEvent, rightVertexEvent) = HandleSiteEvent(beachLine, siteEvent);
+          var (leftVertexEvent, rightVertexEvent) = HandleSiteEvent(beachLine, siteEvent, extents);
 
           if (leftVertexEvent != null)
             events.Enqueue(leftVertexEvent, ((VertexEvent)leftVertexEvent).SweepPos);
@@ -218,16 +231,76 @@ namespace Algorithms.Voronoi
       {
         if (beachLine[i] is HalfEdge edge)
         {
-          completedEdges.Add(ExtendHalfEdge(edge, extents));
+          // Extend edge to extents, and filter out 0-length edges
+          var extendedEdge = ExtendHalfEdge(edge, extents);
+          if (extendedEdge.Start == extendedEdge.End)
+            continue;
+
+          // Edge case: not too important but this edge might actually (and is likely to) be parallel to and connected
+          // to the last one we added, as we grow two edges out away from each other. In that case, we can actually just
+          // add it on to that one instead, and end up with a more optimal graph.
+          if (completedEdges.Any() && TryMergeAdjacentEdges(completedEdges.Last(), extendedEdge, out var mergedEdge))
+          {
+            completedEdges[completedEdges.Count - 1] = mergedEdge;
+            continue;
+          }
+
+          // Finally, just add this edge if that edge case didn't apply. Again, we can just do this anyway and end up
+          // with a slightly less optimal graph.
+          completedEdges.Add(extendedEdge);
         }
       }
       beachLine.Clear();
 
       // Draw final debug view
-      DrawBeachLine("diagram.png", (int)extents.Z, (int)extents.W, 0, points, beachLine, completedEdges);
+      if (_debugDraw)
+        DrawBeachLine("diagram.png", (int)extents.Z, (int)extents.W, 0, points, beachLine, completedEdges);
 
       // Convert to a VoronoiDiagram and return
       return ConvertToResult(completedEdges, extents);
+    }
+
+    /// <summary>
+    /// Try and merge two adjacent edges if they are parallel and share a vertex
+    /// </summary>
+    /// <param name="a">The first edge</param>
+    /// <param name="b">The second edge</param>
+    /// <param name="c">The output edge</param>
+    /// <returns>Whether the edges could be merged</returns>
+    private static bool TryMergeAdjacentEdges(CompletedEdge a, CompletedEdge b, out CompletedEdge c)
+    {
+      // Check if the edges actually share a vertex
+      if (b.Start != a.Start && b.End != a.Start &&
+        b.Start != a.End && b.End != a.End)
+      {
+        c = new CompletedEdge();
+        return false;
+      }
+
+      // Unfortunate that we have to do this vector normalizes but we don't do it that often...
+      var aDir = Vector2.Normalize(a.End - a.Start);
+      var bDir = Vector2.Normalize(b.End - b.Start);
+      var dotProduct = Vector2.Dot(aDir, bDir);
+
+      // If the direction of the two vectors is the same or opposite, the lines are parallel
+      if (!Comparison.ApproxEquals(dotProduct, 1.0f) && !Comparison.ApproxEquals(dotProduct, -1.0f))
+      {
+        c = new CompletedEdge();
+        return false;
+      }
+
+      // Now work out which edge is shared, and replace that one
+      if (a.Start == b.Start)
+        a.Start = b.End;
+      else if (a.Start == b.End)
+        a.Start = b.Start;
+      else if (a.End == b.Start)
+        a.End = b.Start;
+      else if (a.End == b.End)
+        a.End = b.End;
+
+      c = a;
+      return true;
     }
 
     /// <summary>
@@ -236,34 +309,53 @@ namespace Algorithms.Voronoi
     /// <param name="beachLine">The beach line</param>
     /// <param name="siteEvent">The site event</param>
     /// <returns>Any generated vertex events</returns>
-    private static (IEvent, IEvent) HandleSiteEvent(List<IBeachLineItem> beachLine, SiteEvent siteEvent)
+    private static (IEvent, IEvent) HandleSiteEvent(List<IBeachLineItem> beachLine, SiteEvent siteEvent,
+      Vector4 extents)
     {
       // Get the arc above this site event
       var arcAbovePos = FindArcAbove(beachLine, siteEvent.Position.X, siteEvent.Position.Y);
       var arcAbove = beachLine[arcAbovePos] as Arc;
       Debug.Assert(arcAbove != null);
 
-      // Find intersection with arc above
-      float intersectionY = GetParabolaY(siteEvent.Position.X, arcAbove.Focus, siteEvent.Position.Y);
-
-      // Create new arcs (we reuse arcAbove as the left arc)
-      var newArc = new Arc(siteEvent.Position);
-      var rightArc = new Arc(arcAbove.Focus);
-
-      // Create new edges
-      var edgeStart = new Vector2(siteEvent.Position.X, intersectionY);
-      var focusOffset = newArc.Focus - arcAbove.Focus;
-      var edgeDir = Vector2.Normalize(new Vector2(focusOffset.Y, -focusOffset.X));
-
-      var leftEdge = new HalfEdge(edgeStart, -edgeDir);
-      var rightEdge = new HalfEdge(edgeStart, edgeDir);
-
-      // Insert (after arcAbove, which is the left side of the split arc) the sequence: leftSplit, leftEdge, newArc, rightEdge, rightSplit
+      // Find intersection with arc above. If this fails then we're probably doing the first few points and they've all
+      // been on the same sweep line, so there are no actual parabolas yet to intersect them with. In that case,
+      // straightUpwards gets set to true and we make any edges between parabolas extend straight upwards.
       int insertPos = arcAbovePos;
-      beachLine.Insert(++insertPos, leftEdge);
-      beachLine.Insert(++insertPos, newArc);
-      beachLine.Insert(++insertPos, rightEdge);
-      beachLine.Insert(++insertPos, rightArc);
+      if (TryGetParabolaY(siteEvent.Position.X, arcAbove.Focus, siteEvent.Position.Y, out var intersectionY))
+      {
+        // Create new arcs (we reuse arcAbove as the left arc)
+        var newArc = new Arc(siteEvent.Position);
+        var rightArc = new Arc(arcAbove.Focus);
+
+        // Create new edges
+        var edgeStart = new Vector2(siteEvent.Position.X, intersectionY);
+        var focusDir = Vector2.Normalize(newArc.Focus - arcAbove.Focus);
+        // Rotate the direction between the focuses to get the direction of an edge that divides them
+        var edgeDir = new Vector2(focusDir.Y, -focusDir.X);
+
+        var leftEdge = new HalfEdge(edgeStart, -edgeDir);
+        var rightEdge = new HalfEdge(edgeStart, edgeDir);
+
+        // Insert (after arcAbove, which is the left side of the split arc) the sequence:
+        // leftSplit, leftEdge, newArc, rightEdge, rightSplit
+        beachLine.Insert(++insertPos, leftEdge);
+        beachLine.Insert(++insertPos, newArc);
+        beachLine.Insert(++insertPos, rightEdge);
+        beachLine.Insert(++insertPos, rightArc);
+      }
+      else
+      {
+        // Create new arcs (we reuse arcAbove as the left arc)
+        var newArc = new Arc(siteEvent.Position);
+
+        // Place a single new edge in between the previous arc and this arc
+        var edgeStart = new Vector2(siteEvent.Position.X * 0.5f + arcAbove.Focus.X * 0.5f, extents.Y);
+        var edgeDir = new Vector2(0.0f, 1.0f);
+        var newEdge = new HalfEdge(edgeStart, edgeDir);
+
+        beachLine.Insert(++insertPos, newEdge);
+        beachLine.Insert(++insertPos, newArc);
+      }
 
       // Return new vertex events
       return (CreateVertexEvent(beachLine, arcAbovePos), CreateVertexEvent(beachLine, insertPos));
@@ -277,7 +369,8 @@ namespace Algorithms.Voronoi
     /// <param name="completedEdges">The completed edges list to write to</param>
     /// <param name="extents">The extents for completed edges</param>
     /// <returns>Any newly generated vertex events, or null if there wasn't one</returns>
-    private static (IEvent, IEvent) HandleVertexEvent(List<IBeachLineItem> beachLine, VertexEvent vertexEvent, List<CompletedEdge> completedEdges, Vector4 extents)
+    private static (IEvent, IEvent) HandleVertexEvent(List<IBeachLineItem> beachLine, VertexEvent vertexEvent,
+      List<CompletedEdge> completedEdges, Vector4 extents)
     {
       // Find the arc being squeezed
       int i;
@@ -308,8 +401,14 @@ namespace Algorithms.Voronoi
       Debug.Assert(rightArc != null);
 
       // Create new edges
-      completedEdges.Add(ClampEdge(new CompletedEdge(leftEdge.Start, vertexEvent.IntersectionPoint), extents));
-      completedEdges.Add(ClampEdge(new CompletedEdge(vertexEvent.IntersectionPoint, rightEdge.Start), extents));
+      var edgeA = ClampEdge(new CompletedEdge(leftEdge.Start, vertexEvent.IntersectionPoint), extents);
+      var edgeB = ClampEdge(new CompletedEdge(vertexEvent.IntersectionPoint, rightEdge.Start), extents);
+
+      // Filter out 0-length edges
+      if (edgeA.Start != edgeA.End)
+        completedEdges.Add(edgeA);
+      if (edgeB.Start != edgeB.End)
+        completedEdges.Add(edgeB);
 
       // Work out direction between the (now) adjacent arcs, and the rotate it to get the new edge direction
       var arcDir = Vector2.Normalize(leftArc.Focus - rightArc.Focus);
@@ -350,15 +449,8 @@ namespace Algorithms.Voronoi
 
       if (arc.VertexEvent != null)
       {
-        // TODO: work out if we're doing this right
-        // If we already have one that's lower down, then just don't add this one beacuse it'll reference a deleted arc when it gets processed
-        //if (arc.VertexEvent.SweepPos >= vertexEventY)
-        //{
-        //return null;
-        //}
-        //else
-        //{
-        //}
+        // If we already have one for this arc, set its IsValid to false. Dunno if we should always do this but it
+        // seems to work so far.
         arc.VertexEvent.IsValid = false;
       }
 
@@ -395,6 +487,10 @@ namespace Algorithms.Voronoi
       // Add each edge and vertices to the diagram
       foreach (var edge in completedEdges)
       {
+        // Filter out the 0-length edges that sometimes occur when they're clipped
+        if (edge.Start == edge.End)
+          continue;
+
         VoronoiDiagram.Vertex vertexA, vertexB;
 
         // Get or create vertex A
@@ -439,7 +535,10 @@ namespace Algorithms.Voronoi
       {
         foreach (var pair in verticesToConnect.Zip(verticesToConnect.Skip(1)))
         {
-          edges.Add(new VoronoiDiagram.Edge { a = pair.First, b = pair.Second });
+          var newEdge = new VoronoiDiagram.Edge { a = pair.First, b = pair.Second };
+          edges.Add(newEdge);
+          newEdge.a.Edges.Add(newEdge);
+          newEdge.b.Edges.Add(newEdge);
         }
       };
 
@@ -504,6 +603,14 @@ namespace Algorithms.Voronoi
     {
       Vector2 dir = Vector2.Normalize(edge.End - edge.Start);
 
+      // Special case: if dir.x = 0, the edge is straight up, and we should just clamp the y coordinates to the extents
+      if (dir.X == 0.0f)
+      {
+        edge.Start.Y = Math.Clamp(edge.Start.Y, extents.Y, extents.W);
+        edge.End.Y = Math.Clamp(edge.End.Y, extents.Y, extents.W);
+        return edge;
+      }
+
       // y = mx + c
       // c = y - mx
       float m = dir.Y / dir.X;
@@ -560,15 +667,25 @@ namespace Algorithms.Voronoi
     /// <param name="x">The x position to query</param>
     /// <param name="focus">The focus of the parabola</param>
     /// <param name="directrixY">The directrix of the parabola</param>
-    private static float GetParabolaY(float x, Vector2 focus, float directrixY)
+    /// <param name="outY">The output Y</param>
+    /// <returns>Whether the parabola intersects this x position</returns>
+    private static bool TryGetParabolaY(float x, Vector2 focus, float directrixY, out float outY)
     {
+      // If the focus is on the directrix, the arc is basically a straight line up instead of a parabola
+      if (directrixY == focus.Y)
+      {
+        outY = 0.0f;
+        return false;
+      }
+
       // https://jacquesheunis.com/post/fortunes-algorithm/
       // y = (1 / 2(yf - yd)) * (x - xf)^2 + (yf + yd)/2
       float A = 1.0f / (2.0f * (focus.Y - directrixY));
       float B = x - focus.X;
       float C = (focus.Y + directrixY) / 2.0f;
 
-      return A * B * B + C;
+      outY = A * B * B + C;
+      return true;
     }
 
     /// <summary>
@@ -623,7 +740,8 @@ namespace Algorithms.Voronoi
         }
       }
 
-      throw new InternalErrorException($"Couldn't find arc in beachline above x={x}, beachLine.Count={beachLine.Count}");
+      throw new InternalErrorException($"Couldn't find arc in beachline above x={x}," +
+        $" beachLine.Count={beachLine.Count}");
     }
 
     /// <summary>
@@ -675,7 +793,9 @@ namespace Algorithms.Voronoi
         }
 
         // Otherwise they definitely intersect and we can just use GetParabolaY
-        intersection = new Vector2(edge.Start.X, GetParabolaY(edge.Start.X, arc.Focus, directrix));
+        if (!TryGetParabolaY(edge.Start.X, arc.Focus, directrix, out var parabolaY))
+          throw new InternalErrorException();
+        intersection = new Vector2(edge.Start.X, parabolaY);
         return true;
       }
 
@@ -756,9 +876,10 @@ namespace Algorithms.Voronoi
           x = x1;
       }
 
-      float y = GetParabolaY(x, arc.Focus, directrix);
+      if (!TryGetParabolaY(x, arc.Focus, directrix, out var outY))
+        throw new InternalErrorException();
 
-      intersection = new Vector2(x, y);
+      intersection = new Vector2(x, outY);
       return true;
     }
   }

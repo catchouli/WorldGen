@@ -4,6 +4,7 @@ using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
 using System.Diagnostics;
 using System.Numerics;
+using Utils;
 
 namespace Algorithms.Voronoi
 {
@@ -38,15 +39,21 @@ namespace Algorithms.Voronoi
 
         for (int x = 0; x < width; ++x)
         {
-          float y = GetParabolaY(x, point, sweepPos);
-          if (y >= 0 && y < height)
-            image[x, (int)y] = Color.LightGrey;
+          // Draw line straight up edge case
+          if (point.Y != sweepPos)
+          {
+            if (!TryGetParabolaY(x, point, sweepPos, out var y))
+              throw new InternalErrorException();
+            if (y >= 0 && y < height)
+              image[x, (int)y] = Color.LightGrey;
+          }
         }
       }
 
       // Draw completed edges
       foreach (var edge in completedEdges)
       {
+        // TODO: line lengths
         image.Mutate(x => x.DrawLines(Pens.Solid(Color.Blue, 3.0f), new PointF(edge.Start.X, edge.Start.Y), new PointF(edge.End.X, edge.End.Y)));
       }
 
@@ -62,7 +69,8 @@ namespace Algorithms.Voronoi
           {
             if (lastArc != null)
             {
-              var topY = GetParabolaY(curArc.Focus.X, lastArc.Focus, sweepPos);
+              if (!TryGetParabolaY(curArc.Focus.X, lastArc.Focus, sweepPos, out var topY))
+                throw new InternalErrorException();
               image.Mutate(x => x.DrawLines(Pens.Solid(Color.Purple, 1.0f), new PointF(curArc.Focus.X, curArc.Focus.Y), new PointF(curArc.Focus.X, topY)));
             }
           }
@@ -93,7 +101,9 @@ namespace Algorithms.Voronoi
 
             while (xCur < (int)arcEnd && xCur < width)
             {
-              float y = GetParabolaY(xCur, curArc.Focus, sweepPos);
+              if (!TryGetParabolaY(xCur, curArc.Focus, sweepPos, out var y))
+                throw new InternalErrorException();
+
               int yInt = (int)y;
 
               if (yInt >= 0 && yInt < height)
@@ -116,10 +126,8 @@ namespace Algorithms.Voronoi
 
           var arc = edge.Direction.X < 0.0f ? leftArc : rightArc;
 
-          if (!TryIntersectArcHalfEdge(arc, edge, sweepPos, out var intersection))
-            throw new Exception();
-
-          image.Mutate(x => x.DrawLines(Pens.Solid(Color.Orange, 3.0f), new PointF(edge.Start.X, edge.Start.Y), new PointF(intersection.X, intersection.Y)));
+          if (TryIntersectArcHalfEdge(arc, edge, sweepPos, out var intersection))
+            image.Mutate(x => x.DrawLines(Pens.Solid(Color.Orange, 3.0f), new PointF(edge.Start.X, edge.Start.Y), new PointF(intersection.X, intersection.Y)));
         }
       }
 
