@@ -15,6 +15,6 @@ namespace Algorithms.Voronoi
     /// </summary>
     /// <param name="points">The points</param>
     /// <param name="extents">The extents as (minX, minY, maxX, maxY)</param>
-    public VoronoiDiagram GenerateDiagram(IEnumerable<Vector2> points, Vector4 extents);
+    public VoronoiDiagram GenerateDiagram(ISet<Vector2> points, Vector4 extents);
   }
 }

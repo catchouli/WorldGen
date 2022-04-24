@@ -11,7 +11,7 @@ namespace MapGenTestApp
     /// <summary>
     /// The points used for the voronoi diagram
     /// </summary>
-    public List<Vector2> Points = new List<Vector2>();
+    public HashSet<Vector2> Points = new HashSet<Vector2>();
 
     /// <summary>
     /// The voronoi diagram

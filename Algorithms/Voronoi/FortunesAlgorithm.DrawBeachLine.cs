@@ -53,7 +53,6 @@ namespace Algorithms.Voronoi
       // Draw completed edges
       foreach (var edge in completedEdges)
       {
-        // TODO: line lengths
         image.Mutate(x => x.DrawLines(Pens.Solid(Color.Blue, 3.0f), new PointF(edge.Start.X, edge.Start.Y), new PointF(edge.End.X, edge.End.Y)));
       }
 
@@ -86,17 +85,14 @@ namespace Algorithms.Voronoi
             else
             {
               // Get the next edge
-              // TODO: check types... and generally improve this a lot
               var edge = beachLine[curPos + 1] as HalfEdge;
               Debug.Assert(edge != null);
 
               // Intersection is the end of this arc
-              // TODO: can this ever be false for other reasons?
-              if (!TryIntersectArcHalfEdge(curArc, edge, sweepPos, out var intersection))
-                throw new Exception("Blah");
-              //intersection = edge.Start;
-
-              arcEnd = intersection.X;
+              if (TryIntersectArcHalfEdge(curArc, edge, sweepPos, out var intersection))
+                arcEnd = intersection.X;
+              else
+                arcEnd = xCur;
             }
 
             while (xCur < (int)arcEnd && xCur < width)

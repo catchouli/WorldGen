@@ -178,7 +178,7 @@ namespace Algorithms.Voronoi
     }
 
     /// <inheritdoc/>
-    public VoronoiDiagram GenerateDiagram(IEnumerable<Vector2> points, Vector4 extents)
+    public VoronoiDiagram GenerateDiagram(ISet<Vector2> points, Vector4 extents)
     {
       if (!points.Any())
         throw new ArgumentException("Points contained no items");
@@ -384,7 +384,7 @@ namespace Algorithms.Voronoi
       }
 
       // I found that sometimes it's already been removed, maybe this is a bug
-      // TODO: find out why this is happening or how to correctly handle this case
+      // TODO: consider handling this properly by removing events that don't need to be done anymore
       if (i == beachLine.Count)
         return (null, null);
 
@@ -446,13 +446,6 @@ namespace Algorithms.Voronoi
       var circleCentreOffset = arc.Focus - intersection;
       float circleRadius = circleCentreOffset.Length();
       float vertexEventY = intersection.Y + circleRadius;
-
-      if (arc.VertexEvent != null)
-      {
-        // If we already have one for this arc, set its IsValid to false. Dunno if we should always do this but it
-        // seems to work so far.
-        arc.VertexEvent.IsValid = false;
-      }
 
       // Add new vertex event
       arc.VertexEvent = new VertexEvent(vertexEventY, intersection, arc.Id);
@@ -829,16 +822,11 @@ namespace Algorithms.Voronoi
       float knownY = 0.5f * arc.Focus.Y + 0.5f * directrix;
 
       // https://jacquesheunis.com/post/fortunes-algorithm/
-      // After this I gave up and just copied somebody elses, TODO: work this out on my own
       float a = 1.0f / (2.0f * (arc.Focus.Y - directrix));
       float b = -m - 2.0f * a * arc.Focus.X;
       float c = a * arc.Focus.X * arc.Focus.X + knownY - k;
 
       float discriminant = b * b - 4.0f * a * c;
-
-      // I found slight negative discriminant values due to floating point error (sigh) were messing up my results
-      if (Math.Abs(discriminant) < 0.001f)
-        discriminant = 0.0f;
 
       if (discriminant < 0.0f)
       {
