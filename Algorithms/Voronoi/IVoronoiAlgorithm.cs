@@ -15,6 +15,14 @@ namespace Algorithms.Voronoi
     /// </summary>
     /// <param name="sites">The points</param>
     /// <param name="extents">The extents as (minX, minY, maxX, maxY)</param>
-    public VoronoiDiagram GenerateDiagram(ISet<Vector2> sites, Vector4 extents);
+    public VoronoiDiagram GenerateDiagram(IList<Vector2> sites, Vector4 extents);
+
+    /// <summary>
+    /// Relax a voronoi diagram using Lloyd's algorithm, the original diagram is unchanged and a new one is returned
+    /// </summary>
+    /// <param name="diagram">The existing voronoi diagram</param>
+    /// <param name="extents">The extents as (minX, minY, maxX, maxY)</param>
+    /// <returns>The relaxed voronoi diagram</returns>
+    public VoronoiDiagram Relax(in VoronoiDiagram diagram, in Vector4 extents);
   }
 }

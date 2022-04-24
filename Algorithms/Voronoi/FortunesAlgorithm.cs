@@ -25,12 +25,19 @@ namespace Algorithms.Voronoi
       public Vector2 Position;
 
       /// <summary>
+      /// Index of the site, used for building polygons
+      /// </summary>
+      public int Index;
+
+      /// <summary>
       /// Create a new SiteEvent
       /// </summary>
       /// <param name="position">The position of the event</param>
-      public SiteEvent(Vector2 position)
+      /// <param name="index">Index of the site</param>
+      public SiteEvent(Vector2 position, int index)
       {
         Position = position;
+        Index = index;
       }
     }
 
@@ -94,14 +101,28 @@ namespace Algorithms.Voronoi
       public Vector2 Direction;
 
       /// <summary>
+      /// The site that created this half edge
+      /// </summary>
+      public int SiteA;
+
+      /// <summary>
+      /// The other site that created this half edge
+      /// </summary>
+      public int SiteB;
+
+      /// <summary>
       /// Create a new HalfEdge
       /// </summary>
       /// <param name="start">The origin point</param>
       /// <param name="direction">The direction</param>
-      public HalfEdge(Vector2 start, Vector2 direction)
+      /// <param name="siteA">The site that created this half edge</param>
+      /// <param name="siteB">The other site that created this half edge</param>
+      public HalfEdge(Vector2 start, Vector2 direction, int siteA, int siteB)
       {
         Start = start;
         Direction = direction;
+        SiteA = siteA;
+        SiteB = siteB;
       }
     }
 
@@ -114,6 +135,11 @@ namespace Algorithms.Voronoi
       /// The focus of the parabola
       /// </summary>
       public Vector2 Focus;
+
+      /// <summary>
+      /// The site index that this arc belongs to
+      /// </summary>
+      public int SiteIndex;
 
       /// <summary>
       /// The vertex event associated with this arc
@@ -130,9 +156,11 @@ namespace Algorithms.Voronoi
       /// Create a new arc
       /// </summary>
       /// <param name="focus">The focus point</param>
-      public Arc(Vector2 focus)
+      /// <param name="siteIndex">The site index that this arc belongs to</param>
+      public Arc(Vector2 focus, int siteIndex)
       {
         Focus = focus;
+        SiteIndex = siteIndex;
       }
     }
 
@@ -152,14 +180,26 @@ namespace Algorithms.Voronoi
       public Vector2 End;
 
       /// <summary>
+      /// One site that this edge bounds
+      /// </summary>
+      public int SiteA;
+
+      /// <summary>
+      /// The other site that this edge bounds
+      /// </summary>
+      public int SiteB;
+
+      /// <summary>
       /// Create a new CompletedEdge
       /// </summary>
       /// <param name="start">The start point</param>
       /// <param name="end">The end point</param>
-      public CompletedEdge(Vector2 start, Vector2 end)
+      public CompletedEdge(Vector2 start, Vector2 end, int siteA, int siteB)
       {
         Start = start;
         End = end;
+        SiteA = siteA;
+        SiteB = siteB;
       }
     }
 
@@ -178,13 +218,13 @@ namespace Algorithms.Voronoi
     }
 
     /// <inheritdoc/>
-    public VoronoiDiagram GenerateDiagram(ISet<Vector2> sites, Vector4 extents)
+    public VoronoiDiagram GenerateDiagram(IList<Vector2> sites, Vector4 extents)
     {
       if (!sites.Any())
         throw new ArgumentException("Points contained no items");
 
       // Build queue of site events
-      var siteEvents = sites.Select(x => (new SiteEvent(x) as IEvent, x.Y));
+      var siteEvents = sites.Select((x, i) => (new SiteEvent(x, i) as IEvent, x.Y));
       var events = new PriorityQueue<IEvent, float>(siteEvents);
 
       // Create beach line, the list in inefficient but it seems fast enough for now. The annoying thing about it is
@@ -196,7 +236,8 @@ namespace Algorithms.Voronoi
 
       // Handle first event manually by adding the arc to the beachline
       events.TryDequeue(out var firstEvent, out _);
-      beachLine.Add(new Arc((firstEvent as SiteEvent).Position));
+      var firstSiteEvent = firstEvent as SiteEvent;
+      beachLine.Add(new Arc(firstSiteEvent.Position, firstSiteEvent.Index));
 
       // Handle the remaining events
       while (events.TryDequeue(out var evt, out _))
@@ -324,8 +365,8 @@ namespace Algorithms.Voronoi
       if (TryGetParabolaY(siteEvent.Position.X, arcAbove.Focus, siteEvent.Position.Y, out var intersectionY))
       {
         // Create new arcs
-        var newArc = new Arc(siteEvent.Position);
-        var rightArc = new Arc(arcAbove.Focus);
+        var newArc = new Arc(siteEvent.Position, siteEvent.Index);
+        var rightArc = new Arc(arcAbove.Focus, arcAbove.SiteIndex);
 
         // Create new edges
         var edgeStart = new Vector2(siteEvent.Position.X, intersectionY);
@@ -333,8 +374,8 @@ namespace Algorithms.Voronoi
         // Rotate the direction between the focuses to get the direction of an edge that divides them
         var edgeDir = new Vector2(focusDir.Y, -focusDir.X);
 
-        var leftEdge = new HalfEdge(edgeStart, -edgeDir);
-        var rightEdge = new HalfEdge(edgeStart, edgeDir);
+        var leftEdge = new HalfEdge(edgeStart, -edgeDir, newArc.SiteIndex, arcAbove.SiteIndex);
+        var rightEdge = new HalfEdge(edgeStart, edgeDir, newArc.SiteIndex, arcAbove.SiteIndex);
 
         // Insert (after arcAbove, which is the left side of the split arc) the sequence:
         // leftSplit, leftEdge, newArc, rightEdge, rightSplit
@@ -346,12 +387,12 @@ namespace Algorithms.Voronoi
       else
       {
         // Create new arcs (we reuse arcAbove as the left arc)
-        var newArc = new Arc(siteEvent.Position);
+        var newArc = new Arc(siteEvent.Position, siteEvent.Index);
 
         // Place a single new edge in between the previous arc and this arc
         var edgeStart = new Vector2(siteEvent.Position.X * 0.5f + arcAbove.Focus.X * 0.5f, extents.Y);
         var edgeDir = new Vector2(0.0f, 1.0f);
-        var newEdge = new HalfEdge(edgeStart, edgeDir);
+        var newEdge = new HalfEdge(edgeStart, edgeDir, newArc.SiteIndex, arcAbove.SiteIndex);
 
         beachLine.Insert(++insertPos, newEdge);
         beachLine.Insert(++insertPos, newArc);
@@ -360,6 +401,7 @@ namespace Algorithms.Voronoi
       // Since we reused arcAbove as leftArc we should reset its VertexEvent if there is one
       if (arcAbove.VertexEvent != null)
       {
+        arcAbove.Id = Guid.NewGuid().ToString();
         arcAbove.VertexEvent.IsValid = false;
         arcAbove.VertexEvent = null;
       }
@@ -408,10 +450,11 @@ namespace Algorithms.Voronoi
       Debug.Assert(rightArc != null);
 
       // Create new edges
-      var edgeA = ClampEdge(new CompletedEdge(leftEdge.Start, vertexEvent.IntersectionPoint), extents);
-      var edgeB = ClampEdge(new CompletedEdge(vertexEvent.IntersectionPoint, rightEdge.Start), extents);
+      var edgeA = ClampEdge(new CompletedEdge(leftEdge.Start, vertexEvent.IntersectionPoint, leftEdge.SiteA,
+        leftEdge.SiteB), extents);
+      var edgeB = ClampEdge(new CompletedEdge(vertexEvent.IntersectionPoint, rightEdge.Start, rightEdge.SiteA,
+        rightEdge.SiteB), extents);
 
-      bool isNan = float.IsNaN(edgeA.Start.X) || float.IsNaN(edgeA.Start.Y) || float.IsNaN(edgeB.Start.X) || float.IsNaN(edgeB.Start.Y);
       // Filter out 0-length edges
       if (edgeA.Start != edgeA.End)
         completedEdges.Add(edgeA);
@@ -425,7 +468,7 @@ namespace Algorithms.Voronoi
       // Remove the sequence (el, a, er), at this point the arc has been squeezed and the edges have been inserted
       // into completedEdges. We then replace it with a new edge between the two arcs that are left adjacent.
       beachLine.RemoveRange(i - 1, 3);
-      beachLine.Insert(i - 1, new HalfEdge(vertexEvent.IntersectionPoint, newEdgeDirection));
+      beachLine.Insert(i - 1, new HalfEdge(vertexEvent.IntersectionPoint, newEdgeDirection, leftArc.SiteIndex, rightArc.SiteIndex));
 
       // Return new vertex events
       return (CreateVertexEvent(beachLine, i - 2), CreateVertexEvent(beachLine, i));
@@ -467,10 +510,11 @@ namespace Algorithms.Voronoi
     /// <param name="sites">The input istes</param>
     /// <param name="extents">The extents</param>
     /// <returns>The generated Voronoi Diagram</returns>
-    private static VoronoiDiagram ConvertToResult(List<CompletedEdge> completedEdges, ISet<Vector2> sites,
+    private static VoronoiDiagram ConvertToResult(List<CompletedEdge> completedEdges, IList<Vector2> sites,
       Vector4 extents)
     {
-      var vertices = new Dictionary<Vector2, VoronoiDiagram.Vertex>();
+      var siteVertices = sites.Select(x => new VoronoiDiagram.Vertex { Position = x }).ToList();
+      var voronoiVertices = new Dictionary<Vector2, VoronoiDiagram.Vertex>();
       var edges = new List<VoronoiDiagram.Edge>();
 
       // Add corners as vertices, we can connect them later
@@ -479,10 +523,10 @@ namespace Algorithms.Voronoi
       var v2 = new VoronoiDiagram.Vertex { Position = new Vector2(extents.Z, extents.W) };
       var v3 = new VoronoiDiagram.Vertex { Position = new Vector2(extents.X, extents.W) };
 
-      vertices.Add(v0.Position, v0);
-      vertices.Add(v1.Position, v1);
-      vertices.Add(v2.Position, v2);
-      vertices.Add(v3.Position, v3);
+      voronoiVertices.Add(v0.Position, v0);
+      voronoiVertices.Add(v1.Position, v1);
+      voronoiVertices.Add(v2.Position, v2);
+      voronoiVertices.Add(v3.Position, v3);
 
       // The list of edge vertices we're going to connect up at the end
       var edgeVertices = new List<VoronoiDiagram.Vertex>(new[] { v0, v1, v2, v3 });
@@ -497,10 +541,10 @@ namespace Algorithms.Voronoi
         VoronoiDiagram.Vertex vertexA, vertexB;
 
         // Get or create vertex A
-        if (!vertices.TryGetValue(edge.Start, out vertexA))
+        if (!voronoiVertices.TryGetValue(edge.Start, out vertexA))
         {
           vertexA = new VoronoiDiagram.Vertex { Position = edge.Start };
-          vertices.Add(vertexA.Position, vertexA);
+          voronoiVertices.Add(vertexA.Position, vertexA);
 
           // If it's on one of the edges, add it to edgeVertices
           if (vertexA.Position.X == extents.X || vertexA.Position.X == extents.Z ||
@@ -511,10 +555,10 @@ namespace Algorithms.Voronoi
         }
 
         // Get or create vertex B
-        if (!vertices.TryGetValue(edge.End, out vertexB))
+        if (!voronoiVertices.TryGetValue(edge.End, out vertexB))
         {
           vertexB = new VoronoiDiagram.Vertex { Position = edge.End };
-          vertices.Add(vertexB.Position, vertexB);
+          voronoiVertices.Add(vertexB.Position, vertexB);
 
           // If it's on one of the edges, add it to edgeVertices
           if (vertexA.Position.X == extents.X || vertexA.Position.X == extents.Z ||
@@ -525,7 +569,10 @@ namespace Algorithms.Voronoi
         }
 
         // Create edge (will never be a duplicate afaik)
-        var voronoiEdge = new VoronoiDiagram.Edge { a = vertexA, b = vertexB };
+        var voronoiEdge = new VoronoiDiagram.Edge {
+          CornerA = vertexA, CornerB = vertexB,
+          SiteA = siteVertices[edge.SiteA], SiteB = siteVertices[edge.SiteB]
+        };
         edges.Add(voronoiEdge);
 
         // Connect edges and vertices
@@ -538,21 +585,27 @@ namespace Algorithms.Voronoi
       {
         foreach (var pair in verticesToConnect.Zip(verticesToConnect.Skip(1)))
         {
-          var newEdge = new VoronoiDiagram.Edge { a = pair.First, b = pair.Second };
+          // TODO: we need to connect these new edges to the nearest site but it's tricky
+          var newEdge = new VoronoiDiagram.Edge { CornerA = pair.First, CornerB = pair.Second };
           edges.Add(newEdge);
-          newEdge.a.Edges.Add(newEdge);
-          newEdge.b.Edges.Add(newEdge);
+          newEdge.CornerA.Edges.Add(newEdge);
+          newEdge.CornerB.Edges.Add(newEdge);
         }
       };
 
       // To connect the edges, we filter down to just the vertices on one edge, and then order them in the other axis.
       // We can then just connect them all together in a chain.
-      connectVertices(vertices.Values.Where(m => m.Position.Y == extents.Y).OrderBy(m => m.Position.X));
-      connectVertices(vertices.Values.Where(m => m.Position.X == extents.X).OrderBy(m => m.Position.Y));
-      connectVertices(vertices.Values.Where(m => m.Position.X == extents.Z).OrderBy(m => m.Position.Y));
-      connectVertices(vertices.Values.Where(m => m.Position.Y == extents.W).OrderBy(m => m.Position.X));
+      connectVertices(voronoiVertices.Values.Where(m => m.Position.Y == extents.Y).OrderBy(m => m.Position.X));
+      connectVertices(voronoiVertices.Values.Where(m => m.Position.X == extents.X).OrderBy(m => m.Position.Y));
+      connectVertices(voronoiVertices.Values.Where(m => m.Position.X == extents.Z).OrderBy(m => m.Position.Y));
+      connectVertices(voronoiVertices.Values.Where(m => m.Position.Y == extents.W).OrderBy(m => m.Position.X));
 
-      return new VoronoiDiagram { Vertices = vertices.Select(x => x.Value).ToArray(), Edges = edges.ToArray() };
+      return new VoronoiDiagram
+      {
+        VoronoiVertices = voronoiVertices.Select(x => x.Value).ToArray(),
+        SiteVertices = siteVertices.ToArray(),
+        Edges = edges.ToArray()
+      };
     }
 
     /// <summary>
@@ -593,7 +646,7 @@ namespace Algorithms.Voronoi
         end.X = (end.Y - c) / m;
       }
 
-      return new CompletedEdge(start, end);
+      return new CompletedEdge(start, end, edge.SiteA, edge.SiteB);
     }
 
     /// <summary>
@@ -894,6 +947,56 @@ namespace Algorithms.Voronoi
 
       intersection = new Vector2(x, outY);
       return true;
+    }
+
+    /// <inheritdoc/>
+    public VoronoiDiagram Relax(in VoronoiDiagram diagram, in Vector4 extents)
+    {
+      // Get the polygon edges
+      var polygonEdges = new Dictionary<Vector2, List<VoronoiDiagram.Edge>>();
+      foreach (var edge in diagram.Edges)
+      {
+        // TODO: fix the edge edges
+        if (edge.SiteA == null || edge.SiteB == null)
+          continue;
+
+        if (!polygonEdges.TryGetValue(edge.SiteA.Position, out var edgesSiteA))
+        {
+          edgesSiteA = new List<VoronoiDiagram.Edge>();
+          polygonEdges.Add(edge.SiteA.Position, edgesSiteA);
+        }
+
+        if (!polygonEdges.TryGetValue(edge.SiteB.Position, out var edgesSiteB))
+        {
+          edgesSiteB = new List<VoronoiDiagram.Edge>();
+          polygonEdges.Add(edge.SiteB.Position, edgesSiteB);
+        }
+
+        edgesSiteA.Add(edge);
+        edgesSiteB.Add(edge);
+      }
+
+      // Select averaged out positions for new sites
+      var relaxedSites = polygonEdges.Select((x) =>
+      {
+        var midpoints = x.Value.Select(y =>
+        {
+          return y.CornerA.Position * 0.5f + y.CornerB.Position * 0.5f;
+        }).ToList();
+
+        float coeff = 1.0f / midpoints.Count();
+
+        var acc = Vector2.Zero;
+
+        foreach (var midpoint in midpoints)
+        {
+          acc += coeff * midpoint;
+        }
+
+        return acc;
+      });
+
+      return GenerateDiagram(relaxedSites.ToList(), extents);
     }
   }
 }

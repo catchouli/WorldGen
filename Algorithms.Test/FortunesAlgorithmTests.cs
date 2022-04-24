@@ -21,23 +21,23 @@ namespace Algorithms.Test
     public static IEnumerable<object[]> GenerateDiagram_BasicTestCases { get; } = new[]
     {
       // Simple 1-point test case
-      new object[] { "1 point", 4, 4, new HashSet<Vector2> {
+      new object[] { "1 point", 4, 4, new List<Vector2> {
         new Vector2(512.0f, 512.0f)
       } },
 
       // Simple 2-point test case
-      new object[] { "2 points", 4, 5, new HashSet<Vector2> {
+      new object[] { "2 points", 4, 5, new List<Vector2> {
         new Vector2(750.0f, 250.0f), new Vector2(250.0f, 750.0f)
       } },
 
       // Simple 8-point test case
-      new object[] { "8 points", 24, 31, new HashSet<Vector2> {
+      new object[] { "8 points", 24, 31, new List<Vector2> {
           new Vector2(232, 79), new Vector2(939, 210), new Vector2(316, 273), new Vector2(693, 364),
           new Vector2(1012, 454), new Vector2(394, 485), new Vector2(131, 615), new Vector2(754, 639)
       } },
 
       // Edge case where the first n points have the same Y coordinate so there are no active parabolas yet
-      new object[] { "SameYCoordinate", 26, 34, new HashSet<Vector2>
+      new object[] { "SameYCoordinate", 26, 34, new List<Vector2>
       {
         new Vector2(232, 79), new Vector2(610, 79), new Vector2(939, 210), new Vector2(316, 273),
         new Vector2(693, 364), new Vector2(1012, 454), new Vector2(394, 485), new Vector2(131, 615),
@@ -58,7 +58,7 @@ namespace Algorithms.Test
     [DataTestMethod]
     [DynamicData(nameof(GenerateDiagram_BasicTestCases))]
     public void GenerateDiagram_BasicTest(string _, int expectedVertexCount, int expectedEdgeCount,
-      HashSet<Vector2> points)
+      List<Vector2> points)
     {
       // Arrange
       const float Width = 1024;
@@ -71,7 +71,7 @@ namespace Algorithms.Test
       var voronoi = fortune.GenerateDiagram(points, new Vector4(0.0f, 0.0f, Width, Height));
 
       // Assert
-      voronoi.Vertices.Length.ShouldBe(expectedVertexCount);
+      voronoi.VoronoiVertices.Length.ShouldBe(expectedVertexCount);
       voronoi.Edges.Length.ShouldBe(expectedEdgeCount);
 
       // Some simple sanity checks
@@ -89,7 +89,7 @@ namespace Algorithms.Test
 
       // Assert
       Assert.ThrowsException<ArgumentException>(
-        () => fortune.GenerateDiagram(new HashSet<Vector2>(), new Vector4(0.0f, 0.0f, 1.0f, 1.0f)),
+        () => fortune.GenerateDiagram(new List<Vector2>(), new Vector4(0.0f, 0.0f, 1.0f, 1.0f)),
         "Points contained no items");
     }
 
@@ -142,9 +142,9 @@ namespace Algorithms.Test
     /// <param name="maxX">The max X coordinate value</param>
     /// <param name="maxY">The max Y coordinate value</param>
     /// <returns>The points</returns>
-    private static HashSet<Vector2> PointsFromSeed(int seed, int count, float maxX, float maxY)
+    private static List<Vector2> PointsFromSeed(int seed, int count, float maxX, float maxY)
     {
-      var set = new HashSet<Vector2>();
+      var set = new List<Vector2>();
       var rng = new Random(seed);
 
       for (int i = 0; i < count; ++i)
@@ -163,7 +163,7 @@ namespace Algorithms.Test
     {
       // Basic sanity check for each vertex
       var verticesEncountered = new List<Vector2>();
-      foreach (var v in diagram.Vertices)
+      foreach (var v in diagram.VoronoiVertices)
       {
         float.IsNaN(v.Position.X).ShouldBe(false);
         float.IsNaN(v.Position.Y).ShouldBe(false);
@@ -184,20 +184,20 @@ namespace Algorithms.Test
       var edgesEncountered = new List<(Vector2, Vector2)>();
       foreach (var e in diagram.Edges)
       {
-        diagram.Vertices.ShouldContain(e.a);
-        diagram.Vertices.ShouldContain(e.b);
-        edgesEncountered.Add((e.a.Position, e.b.Position));
+        diagram.VoronoiVertices.ShouldContain(e.CornerA);
+        diagram.VoronoiVertices.ShouldContain(e.CornerB);
+        edgesEncountered.Add((e.CornerA.Position, e.CornerB.Position));
 
-        if (!verticesToEdges.TryGetValue(e.a, out var vertexEdgesA))
+        if (!verticesToEdges.TryGetValue(e.CornerA, out var vertexEdgesA))
         {
           vertexEdgesA = new List<VoronoiDiagram.Edge>();
-          verticesToEdges.Add(e.a, vertexEdgesA);
+          verticesToEdges.Add(e.CornerA, vertexEdgesA);
         }
 
-        if (!verticesToEdges.TryGetValue(e.b, out var vertexEdgesB))
+        if (!verticesToEdges.TryGetValue(e.CornerB, out var vertexEdgesB))
         {
           vertexEdgesB = new List<VoronoiDiagram.Edge>();
-          verticesToEdges.Add(e.b, vertexEdgesB);
+          verticesToEdges.Add(e.CornerB, vertexEdgesB);
         }
 
         vertexEdgesA.Add(e);
@@ -223,7 +223,7 @@ namespace Algorithms.Test
       {
         foreach (var b in diagram.Edges)
         {
-          if (a.a.Position == b.a.Position && a.b.Position == b.b.Position)
+          if (a.CornerA.Position == b.CornerA.Position && a.CornerB.Position == b.CornerB.Position)
             continue;
 
           HasInvalidIntersection(a, b).ShouldBe(false);
@@ -241,10 +241,10 @@ namespace Algorithms.Test
     /// <returns>Whether they intersect</returns>
     private static bool HasInvalidIntersection(VoronoiDiagram.Edge a, VoronoiDiagram.Edge b)
     {
-      var a0 = new Point3d((double)a.a.Position.X, (double)a.a.Position.Y, 0.0);
-      var a1 = new Point3d((double)a.b.Position.X, (double)a.b.Position.Y, 0.0);
-      var b0 = new Point3d((double)b.a.Position.X, (double)b.a.Position.Y, 0.0);
-      var b1 = new Point3d((double)b.b.Position.X, (double)b.b.Position.Y, 0.0);
+      var a0 = new Point3d((double)a.CornerA.Position.X, (double)a.CornerA.Position.Y, 0.0);
+      var a1 = new Point3d((double)a.CornerB.Position.X, (double)a.CornerB.Position.Y, 0.0);
+      var b0 = new Point3d((double)b.CornerA.Position.X, (double)b.CornerA.Position.Y, 0.0);
+      var b1 = new Point3d((double)b.CornerB.Position.X, (double)b.CornerB.Position.Y, 0.0);
 
       var segmentA = new Segment3d(a0, a1);
       var segmentB = new Segment3d(b0, b1);

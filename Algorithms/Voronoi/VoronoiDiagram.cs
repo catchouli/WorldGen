@@ -13,7 +13,7 @@ namespace Algorithms.Voronoi
     public class Vertex
     {
       public Vector2 Position;
-      public HashSet<Edge> Edges = new HashSet<Edge>();
+      public List<Edge> Edges = new List<Edge>();
     }
 
     /// <summary>
@@ -21,18 +21,26 @@ namespace Algorithms.Voronoi
     /// </summary>
     public class Edge
     {
-      public Vertex a, b;
+      /// <summary>
+      /// The voronoi vertices this edge connects (aka the edges in the voronoi diagram)
+      /// </summary>
+      public Vertex CornerA, CornerB;
+
+      /// <summary>
+      /// The sites this edge connects (aka the edges in the delaunay triangulation)
+      /// </summary>
+      public Vertex SiteA, SiteB;
     }
 
     /// <summary>
-    /// The sites used to generate the diagram
+    /// The site vertices
     /// </summary>
-    public Vector2[] Sites;
+    public Vertex[] SiteVertices;
 
     /// <summary>
     /// The vertices in the diagram
     /// </summary>
-    public Vertex[] Vertices;
+    public Vertex[] VoronoiVertices;
 
     /// <summary>
     /// The edges in the diagram
