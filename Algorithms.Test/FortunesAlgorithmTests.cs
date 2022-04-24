@@ -46,22 +46,10 @@ namespace Algorithms.Test
 
       // Edge case where two points were close on n=37 and caused a weird issue where an edge would extend all the way
       // across the diagram
-      new object[] { "Weird37Case", 109, 145, new HashSet<Vector2>
-      {
-        new Vector2(851.7579f, 341.15997f), new Vector2(921.57135f, 465.1639f), new Vector2(834.8818f, 18.377758f),
-        new Vector2(483.43f, 826.0167f), new Vector2(307.37506f, 895.4595f), new Vector2(486.83398f, 675.895f),
-        new Vector2(209.39368f, 551.3723f), new Vector2(846.1922f, 930.3768f), new Vector2(833.5957f, 348.9687f),
-        new Vector2(886.3948f, 12.622356f), new Vector2(722.3821f, 337.71747f), new Vector2(481.41415f, 961.1617f),
-        new Vector2(571.9369f, 540.9318f), new Vector2(206.54587f, 166.68617f), new Vector2(269.2978f, 443.39212f),
-        new Vector2(95.618164f, 221.56389f), new Vector2(484.71545f, 829.5344f), new Vector2(129.79942f, 96.846634f),
-        new Vector2(318.38266f, 445.55557f), new Vector2(364.3122f, 994.4842f), new Vector2(1009.58514f, 915.5187f),
-        new Vector2(342.62958f, 925.90265f), new Vector2(368.69266f, 848.5977f), new Vector2(253.50389f, 21.113436f),
-        new Vector2(154.34952f, 736.9793f), new Vector2(511.25812f, 416.3551f), new Vector2(826.05536f, 439.902f),
-        new Vector2(642.75006f, 514.0404f), new Vector2(883.7458f, 984.40967f), new Vector2(917.227f, 293.94998f),
-        new Vector2(835.8319f, 316.74384f), new Vector2(556.71893f, 887.9829f), new Vector2(799.8413f, 265.2701f),
-        new Vector2(191.17955f, 403.85925f), new Vector2(421.57288f, 749.3456f), new Vector2(611.9941f, 388.04016f),
-        new Vector2(1008.6565f, 915.91064f)
-      } },
+      new object[] { "PointsFromSeed(908772445, 37)", 109, 145, PointsFromSeed(908772445, 37, 1024.0f, 1024.0f) },
+
+      // Something similar, no idea what's happening there but it has a lot of edges going everywhere over the diagram
+      new object[] { "PointsFromSeed(1380721063, 91)", 268, 358, PointsFromSeed(1380721063, 91, 1024.0f, 1024.0f) },
     };
 
     /// <summary>
@@ -73,22 +61,109 @@ namespace Algorithms.Test
       HashSet<Vector2> points)
     {
       // Arrange
-      const int width = 1024;
-      const int height = 1024;
+      const float Width = 1024;
+      const float Height = 1024;
 
       // I put debugOutput to true because it's handy to see and it might catch some extra issues
       var fortune = new FortunesAlgorithm(true);
 
       // Act
-      var voronoi = fortune.GenerateDiagram(points, new Vector4(0.0f, 0.0f, width, height));
+      var voronoi = fortune.GenerateDiagram(points, new Vector4(0.0f, 0.0f, Width, Height));
 
       // Assert
       voronoi.Vertices.Length.ShouldBe(expectedVertexCount);
       voronoi.Edges.Length.ShouldBe(expectedEdgeCount);
 
+      // Some simple sanity checks
+      CheckDiagramRoughlyValid(voronoi, Width, Height).ShouldBe(true);
+    }
+
+    /// <summary>
+    /// Check that an invalid input of 0 points is rejected with an argument exception
+    /// </summary>
+    [TestMethod]
+    public void GenerateDiagram_InvalidInput()
+    {
+      // Arrange
+      var fortune = new FortunesAlgorithm(false);
+
+      // Assert
+      Assert.ThrowsException<ArgumentException>(
+        () => fortune.GenerateDiagram(new HashSet<Vector2>(), new Vector4(0.0f, 0.0f, 1.0f, 1.0f)),
+        "Points contained no items");
+    }
+
+    /// <summary>
+    /// A test that generates a voronoi diagram with random input points to see if it fails
+    /// </summary>
+    [TestMethod]
+    public void GenerateDiagram_RandomInputTest()
+    {
+      const bool ShouldLoop = false;
+
+      // === Assert ===
+      const float Width = 1024.0f;
+      const float Height = 1024.0f;
+
+      // Create fortune algorithm instance
+      var fortune = new FortunesAlgorithm(false);
+
+      // Create random number generator
+      var rng = new Random();
+
+      // Loop forever if ShouldLoop is true
+      while (true)
+      {
+        // Generate seed and count
+        int seed = rng.Next();
+        int count = rng.Next(1, 100);
+
+        // Generate points
+        var points = PointsFromSeed(seed, count, Width, Height);
+
+        // === Act ===
+        // Generate diagram
+        Console.WriteLine($"Generating diagram for seed={seed} and count={count}");
+        var diagram = fortune.GenerateDiagram(points, new Vector4(0.0f, 0.0f, Width, Height));
+
+        // === Assert ===
+        CheckDiagramRoughlyValid(diagram, Width, Height).ShouldBe(true);
+
+        if (!ShouldLoop)
+          break;
+      }
+    }
+
+    /// <summary>
+    /// Create a set of input points from a given seed and count
+    /// </summary>
+    /// <param name="seed">The seed</param>
+    /// <param name="count">The count</param>
+    /// <param name="maxX">The max X coordinate value</param>
+    /// <param name="maxY">The max Y coordinate value</param>
+    /// <returns>The points</returns>
+    private static HashSet<Vector2> PointsFromSeed(int seed, int count, float maxX, float maxY)
+    {
+      var set = new HashSet<Vector2>();
+      var rng = new Random(seed);
+
+      for (int i = 0; i < count; ++i)
+      {
+        set.Add(new Vector2(rng.NextSingle() * maxX, rng.NextSingle() * maxY));
+      }
+
+      return set;
+    }
+
+    /// <summary>
+    /// Runs some simple sanity checks to see if the diagram is roughly valid
+    /// </summary>
+    /// <param name="diagram">The voronoi diagram</param>
+    private static bool CheckDiagramRoughlyValid(VoronoiDiagram diagram, float maxX, float maxY)
+    {
       // Basic sanity check for each vertex
       var verticesEncountered = new List<Vector2>();
-      foreach (var v in voronoi.Vertices)
+      foreach (var v in diagram.Vertices)
       {
         float.IsNaN(v.Position.X).ShouldBe(false);
         float.IsNaN(v.Position.Y).ShouldBe(false);
@@ -96,8 +171,8 @@ namespace Algorithms.Test
         float.IsInfinity(v.Position.Y).ShouldBe(false);
         v.Position.X.ShouldBeGreaterThanOrEqualTo(0.0f);
         v.Position.Y.ShouldBeGreaterThanOrEqualTo(0.0f);
-        v.Position.X.ShouldBeLessThanOrEqualTo((float)width);
-        v.Position.Y.ShouldBeLessThanOrEqualTo((float)height);
+        v.Position.X.ShouldBeLessThanOrEqualTo(maxX);
+        v.Position.Y.ShouldBeLessThanOrEqualTo(maxY);
 
         v.Edges.Count.ShouldBeGreaterThan(0);
 
@@ -107,10 +182,10 @@ namespace Algorithms.Test
       // Basic sanity check for edges
       var verticesToEdges = new Dictionary<VoronoiDiagram.Vertex, List<VoronoiDiagram.Edge>>();
       var edgesEncountered = new List<(Vector2, Vector2)>();
-      foreach (var e in voronoi.Edges)
+      foreach (var e in diagram.Edges)
       {
-        voronoi.Vertices.ShouldContain(e.a);
-        voronoi.Vertices.ShouldContain(e.b);
+        diagram.Vertices.ShouldContain(e.a);
+        diagram.Vertices.ShouldContain(e.b);
         edgesEncountered.Add((e.a.Position, e.b.Position));
 
         if (!verticesToEdges.TryGetValue(e.a, out var vertexEdgesA))
@@ -144,9 +219,9 @@ namespace Algorithms.Test
       }
 
       // Check if any segments intersect (they should only ever meet at vertices)
-      foreach (var a in voronoi.Edges)
+      foreach (var a in diagram.Edges)
       {
-        foreach (var b in voronoi.Edges)
+        foreach (var b in diagram.Edges)
         {
           if (a.a.Position == b.a.Position && a.b.Position == b.b.Position)
             continue;
@@ -154,21 +229,8 @@ namespace Algorithms.Test
           HasInvalidIntersection(a, b).ShouldBe(false);
         }
       }
-    }
 
-    /// <summary>
-    /// Check that an invalid input of 0 points is rejected with an argument exception
-    /// </summary>
-    [TestMethod]
-    public void GenerateDiagram_InvalidInput()
-    {
-      // Arrange
-      var fortune = new FortunesAlgorithm(false);
-
-      // Assert
-      Assert.ThrowsException<ArgumentException>(
-        () => fortune.GenerateDiagram(new HashSet<Vector2>(), new Vector4(0.0f, 0.0f, 1.0f, 1.0f)),
-        "Points contained no items");
+      return true;
     }
 
     /// <summary>

@@ -26,7 +26,7 @@ namespace MapGenTestApp
     /// <summary>
     /// The random number generator
     /// </summary>
-    private static Random _rng = new Random();
+    private static Random _rng = new Random(10);
 
     /// <summary>
     /// Main
@@ -35,14 +35,10 @@ namespace MapGenTestApp
     {
       Console.WriteLine($"Generating {Width} * {Height} image");
 
-      // Render parabola
-      //RenderParabolaConstruction(Width, Height, new Vector2(500, 500), 700, "parabola.png");
-      RenderParabolaFormula(Width, Height, new Vector2(500, 500), 700, "parabola.png");
-
       // Render map
       var mapOptions = new MapOptions
       {
-        PointCount = 10000
+        PointCount = 1000
       };
 
       var map = GenerateMap(mapOptions);
@@ -62,15 +58,6 @@ namespace MapGenTestApp
       {
         map.Points.Add(new Vector2(_rng.NextSingle() * (float)Width, _rng.NextSingle() * (float)Height));
       }
-
-      // same Y edge case
-      //map.Points.Clear();
-      //map.Points = new List<Vector2>
-      //{
-        //new Vector2(232, 79), new Vector2(610, 79), new Vector2(939, 210), new Vector2(316, 273),
-        //new Vector2(693, 364), new Vector2(1012, 454), new Vector2(394, 485), new Vector2(131, 615),
-        //new Vector2(754, 639)
-      //};
 
       // Generate voronoi diagram
       var fortune = new FortunesAlgorithm(true);

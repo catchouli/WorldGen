@@ -324,6 +324,7 @@ namespace Algorithms.Voronoi
       if (TryGetParabolaY(siteEvent.Position.X, arcAbove.Focus, siteEvent.Position.Y, out var intersectionY))
       {
         // Create new arcs (we reuse arcAbove as the left arc)
+        var leftArc = new Arc(arcAbove.Focus);
         var newArc = new Arc(siteEvent.Position);
         var rightArc = new Arc(arcAbove.Focus);
 
@@ -338,6 +339,8 @@ namespace Algorithms.Voronoi
 
         // Insert (after arcAbove, which is the left side of the split arc) the sequence:
         // leftSplit, leftEdge, newArc, rightEdge, rightSplit
+        beachLine.RemoveAt(insertPos);
+        beachLine.Insert(insertPos, leftArc);
         beachLine.Insert(++insertPos, leftEdge);
         beachLine.Insert(++insertPos, newArc);
         beachLine.Insert(++insertPos, rightEdge);
