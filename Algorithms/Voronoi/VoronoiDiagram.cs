@@ -8,11 +8,34 @@ namespace Algorithms.Voronoi
   public class VoronoiDiagram
   {
     /// <summary>
+    /// A site from the input data
+    /// </summary>
+    public class Site
+    {
+      /// <summary>
+      /// The site's position
+      /// </summary>
+      public Vector2 Position;
+
+      /// <summary>
+      /// The edges of the cell around the site
+      /// </summary>
+      public List<Edge> Edges = new List<Edge>();
+    }
+
+    /// <summary>
     /// A vertex in the diagram
     /// </summary>
     public class Vertex
     {
+      /// <summary>
+      /// The position of the vertex
+      /// </summary>
       public Vector2 Position;
+
+      /// <summary>
+      /// The edges that make up the vertex
+      /// </summary>
       public List<Edge> Edges = new List<Edge>();
     }
 
@@ -29,18 +52,18 @@ namespace Algorithms.Voronoi
       /// <summary>
       /// The sites this edge connects (aka the edges in the delaunay triangulation)
       /// </summary>
-      public Vertex SiteA, SiteB;
+      public Site SiteA, SiteB;
     }
 
     /// <summary>
     /// The site vertices
     /// </summary>
-    public Vertex[] SiteVertices;
+    public Site[] Sites;
 
     /// <summary>
     /// The vertices in the diagram
     /// </summary>
-    public Vertex[] VoronoiVertices;
+    public Vertex[] Vertices;
 
     /// <summary>
     /// The edges in the diagram

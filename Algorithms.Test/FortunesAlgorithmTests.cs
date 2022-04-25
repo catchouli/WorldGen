@@ -71,7 +71,7 @@ namespace Algorithms.Test
       var voronoi = fortune.GenerateDiagram(points, new Vector4(0.0f, 0.0f, Width, Height));
 
       // Assert
-      voronoi.VoronoiVertices.Length.ShouldBe(expectedVertexCount);
+      voronoi.Vertices.Length.ShouldBe(expectedVertexCount);
       voronoi.Edges.Length.ShouldBe(expectedEdgeCount);
 
       // Some simple sanity checks
@@ -163,7 +163,7 @@ namespace Algorithms.Test
     {
       // Basic sanity check for each vertex
       var verticesEncountered = new List<Vector2>();
-      foreach (var v in diagram.VoronoiVertices)
+      foreach (var v in diagram.Vertices)
       {
         float.IsNaN(v.Position.X).ShouldBe(false);
         float.IsNaN(v.Position.Y).ShouldBe(false);
@@ -184,8 +184,8 @@ namespace Algorithms.Test
       var edgesEncountered = new List<(Vector2, Vector2)>();
       foreach (var e in diagram.Edges)
       {
-        diagram.VoronoiVertices.ShouldContain(e.CornerA);
-        diagram.VoronoiVertices.ShouldContain(e.CornerB);
+        diagram.Vertices.ShouldContain(e.CornerA);
+        diagram.Vertices.ShouldContain(e.CornerB);
         edgesEncountered.Add((e.CornerA.Position, e.CornerB.Position));
 
         if (!verticesToEdges.TryGetValue(e.CornerA, out var vertexEdgesA))

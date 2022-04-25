@@ -80,12 +80,7 @@ namespace MapGenTestApp
     private static void RenderDebugMap(Map map, string filename)
     {
       const float PointRadius = 1.0f;
-
-      var sitePens = new Dictionary<Vector2, Pen>(map.Voronoi.SiteVertices.Select(v => {
-        var color = new Color(new Vector4(_rng.NextSingle(), _rng.NextSingle(), _rng.NextSingle(), 1.0f));
-        var pen = Pens.Solid(color, 3.0f);
-        return new KeyValuePair<Vector2, Pen>(v.Position, pen);
-      }));
+      const float EdgeThickness = 3.0f;
 
       using var image = new Image<Rgba32>(Width, Height);
 
@@ -93,35 +88,33 @@ namespace MapGenTestApp
       image.Mutate(x => x.Fill(Color.White));
 
       // Draw points
-      foreach (var site in map.Voronoi.SiteVertices)
+      foreach (var site in map.Voronoi.Sites)
       {
+        // Create new pen with random color
+        var color = new Color(new Vector4(_rng.NextSingle(), _rng.NextSingle(), _rng.NextSingle(), 1.0f));
+        var pen = Pens.Solid(color, EdgeThickness);
+
+        // Draw site position
         var ellipse = new EllipsePolygon(site.Position.X, site.Position.Y, PointRadius);
-        image.Mutate(x => x.Draw(sitePens[site.Position], ellipse));
-      }
+        image.Mutate(x => x.Draw(pen, ellipse));
 
-      // Render voronoi diagram
-      var orangePen = Pens.Solid(Color.Orange, PointRadius);
-      foreach (var edge in map.Voronoi.Edges)
-      {
-        if (edge.SiteA == null || edge.SiteB == null)
-          continue;
+        // Draw edges
+        foreach (var edge in site.Edges)
+        {
+          var center = 0.5f * edge.CornerA.Position + 0.5f * edge.CornerB.Position;
+          var centerDir = Vector2.Normalize(center - site.Position);
 
-        var center = 0.5f * edge.CornerA.Position + 0.5f * edge.CornerB.Position;
-        var centerDir = Vector2.Normalize(center - edge.SiteA.Position);
+          var offset = new PointF(centerDir.X * EdgeThickness, centerDir.Y * EdgeThickness);
 
-        var offset = new PointF(centerDir.X * 1.0f, centerDir.Y * 1.0f);
-        offset.X = 0.0f;
-        offset.Y = 0.0f;
+          var pointA = new PointF(edge.CornerA.Position.X, edge.CornerA.Position.Y);
+          var pointB = new PointF(edge.CornerB.Position.X, edge.CornerB.Position.Y);
 
-        var pointA = new PointF(edge.CornerA.Position.X, edge.CornerA.Position.Y);
-        var pointB = new PointF(edge.CornerB.Position.X, edge.CornerB.Position.Y);
-
-        image.Mutate(x => x.DrawLines(sitePens[edge.SiteA.Position], pointA - offset, pointB - offset));
-        image.Mutate(x => x.DrawLines(sitePens[edge.SiteB.Position], pointA + offset, pointB + offset));
+          image.Mutate(x => x.DrawLines(pen, pointA - offset, pointB - offset));
+        }
       }
 
       // Render voronoi vertices on top
-      foreach (var vertex in map.Voronoi.VoronoiVertices)
+      foreach (var vertex in map.Voronoi.Vertices)
       {
         var point = new PointF(vertex.Position.X, vertex.Position.Y);
         image.Mutate(x => x.DrawLines(Pens.Solid(Color.Green, 3.0f), point, point));

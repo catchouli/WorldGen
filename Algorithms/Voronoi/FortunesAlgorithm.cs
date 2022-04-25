@@ -454,13 +454,13 @@ namespace Algorithms.Voronoi
     /// Convert our generated edges into the result type VoronoiDiagram
     /// </summary>
     /// <param name="completedEdges">The generated edges</param>
-    /// <param name="sites">The input istes</param>
+    /// <param name="inputSites">The input sites</param>
     /// <param name="extents">The extents</param>
     /// <returns>The generated Voronoi Diagram</returns>
-    private static VoronoiDiagram ConvertToResult(List<CompletedEdge> completedEdges, IList<Vector2> sites,
+    private static VoronoiDiagram ConvertToResult(List<CompletedEdge> completedEdges, IList<Vector2> inputSites,
       Vector4 extents)
     {
-      var siteVertices = sites.Select(x => new VoronoiDiagram.Vertex { Position = x }).ToList();
+      var sites = inputSites.Select(x => new VoronoiDiagram.Site { Position = x }).ToList();
       var voronoiVertices = new Dictionary<Vector2, VoronoiDiagram.Vertex>();
       var edges = new List<VoronoiDiagram.Edge>();
 
@@ -518,7 +518,7 @@ namespace Algorithms.Voronoi
         // Create edge (will never be a duplicate afaik)
         var voronoiEdge = new VoronoiDiagram.Edge {
           CornerA = vertexA, CornerB = vertexB,
-          SiteA = siteVertices[edge.SiteA], SiteB = siteVertices[edge.SiteB]
+          SiteA = sites[edge.SiteA], SiteB = sites[edge.SiteB]
         };
         edges.Add(voronoiEdge);
 
@@ -527,15 +527,35 @@ namespace Algorithms.Voronoi
         vertexB.Edges.Add(voronoiEdge);
       }
 
+      // Remove redundant edges created because we grow edges out from an intersection point
+      voronoiVertices = MergeRedundantEdges(voronoiVertices, edges);
+
+      // Add all the edges for each site to it so we can find the polygon easily
+      foreach (var edge in edges)
+      {
+        edge.SiteA.Edges.Add(edge);
+        edge.SiteB.Edges.Add(edge);
+      }
+
       // Connect edge vertices on each of the four edges
       var connectVertices = (IEnumerable<VoronoiDiagram.Vertex> verticesToConnect) =>
       {
+        // Create a new edge between each pair of vertices, adding it to the appropriate site
         foreach (var (a, b) in verticesToConnect.Zip(verticesToConnect.Skip(1)))
         {
+          // Create new edge
           var newEdge = new VoronoiDiagram.Edge { CornerA = a, CornerB = b };
           edges.Add(newEdge);
           newEdge.CornerA.Edges.Add(newEdge);
           newEdge.CornerB.Edges.Add(newEdge);
+
+          // Find list of candidate sites from connected vertices, and then find the nearest one
+          var midpoint = a.Position * 0.5f + b.Position * 0.5f;
+          var nearestSite = b.Edges.SelectMany(e => new[] { e.SiteA, e.SiteB })
+          .Concat(a.Edges.SelectMany(e => new[] { e.SiteA, e.SiteB }))
+          .OrderBy(site => site != null ? Vector2.DistanceSquared(midpoint, site.Position) : float.MaxValue)
+          .FirstOrDefault();
+          nearestSite?.Edges.Add(newEdge);
         }
       };
 
@@ -546,13 +566,54 @@ namespace Algorithms.Voronoi
       connectVertices(voronoiVertices.Values.Where(m => m.Position.X == extents.Z).OrderBy(m => m.Position.Y));
       connectVertices(voronoiVertices.Values.Where(m => m.Position.Y == extents.W).OrderBy(m => m.Position.X));
 
-      // Remove redundant edges created because we grow edges out from an intersection point
-      var finalVertices = MergeRedundantEdges(voronoiVertices, edges);
+      // Order the edges for each site so that we have coherent polygons, just as a convenience
+      foreach (var site in sites)
+      {
+        if (!site.Edges.Any())
+          continue;
+
+        // Get the first edge and the remaining edges
+        var firstEdge = site.Edges.First();
+        var siteEdges = site.Edges.Skip(1).ToHashSet();
+
+        // Clear the original list so we can insert it in a new order
+        site.Edges.Clear();
+        site.Edges.Add(firstEdge);
+
+        // Start from firstEdge and find the next edge repeatedly until we get back to firstEdge
+        var startVertex = firstEdge.CornerA;
+        var curVertex = firstEdge.CornerB;
+
+        while (siteEdges.Any())
+        {
+          try
+          {
+            // Find next connecting edge
+            var nextEdge = siteEdges.Single(e => e.CornerA.Position == curVertex.Position
+              || e.CornerB.Position == curVertex.Position);
+
+            // Remove this edge and add it to the list
+            siteEdges.Remove(nextEdge);
+            site.Edges.Add(nextEdge);
+
+            // Work out which vertex is the next one to search from
+            curVertex = (nextEdge.CornerA.Position != curVertex.Position ? nextEdge.CornerA : nextEdge.CornerB);
+          }
+          catch (InvalidOperationException e)
+          {
+            throw new InternalErrorException($"Failed to find next edge for vertex {curVertex}", e);
+          }
+        }
+
+        // At this point we should've gone around in a loop so startVertex should == curVertex
+        if (startVertex != curVertex)
+          throw new InternalErrorException("Failed to find polygon loop for site");
+      }
 
       return new VoronoiDiagram
       {
-        VoronoiVertices = finalVertices,
-        SiteVertices = siteVertices.ToArray(),
+        Vertices = voronoiVertices.Select(x => x.Value).ToArray(),
+        Sites = sites.ToArray(),
         Edges = edges.ToArray()
       };
     }
@@ -562,9 +623,10 @@ namespace Algorithms.Voronoi
     /// center of parabola intersections
     /// </summary>
     /// <param name="vertices">The vertices</param>
-    private static VoronoiDiagram.Vertex[] MergeRedundantEdges(Dictionary<Vector2, VoronoiDiagram.Vertex> vertices, List<VoronoiDiagram.Edge> edges)
+    private static Dictionary<Vector2, VoronoiDiagram.Vertex> MergeRedundantEdges(
+      Dictionary<Vector2, VoronoiDiagram.Vertex> vertices, List<VoronoiDiagram.Edge> edges)
     {
-      var ret = new List<VoronoiDiagram.Vertex>();
+      var ret = new Dictionary<Vector2, VoronoiDiagram.Vertex>();
 
       foreach (var vertex in vertices.Values)
       {
@@ -587,11 +649,11 @@ namespace Algorithms.Voronoi
         // And if it's not redundant, add it to the output set
         else
         {
-          ret.Add(vertex);
+          ret.Add(vertex.Position, vertex);
         }
       }
 
-      return ret.ToArray();
+      return ret;
     }
 
     /// <summary>
@@ -958,51 +1020,58 @@ namespace Algorithms.Voronoi
     /// <inheritdoc/>
     public VoronoiDiagram Relax(in VoronoiDiagram diagram, in Vector4 extents)
     {
-      // Get the polygon edges
-      var polygonEdges = new Dictionary<Vector2, List<VoronoiDiagram.Edge>>();
-      foreach (var edge in diagram.Edges)
-      {
-        // TODO: fix the edge edges
-        if (edge.SiteA == null || edge.SiteB == null)
-          continue;
-
-        if (!polygonEdges.TryGetValue(edge.SiteA.Position, out var edgesSiteA))
-        {
-          edgesSiteA = new List<VoronoiDiagram.Edge>();
-          polygonEdges.Add(edge.SiteA.Position, edgesSiteA);
-        }
-
-        if (!polygonEdges.TryGetValue(edge.SiteB.Position, out var edgesSiteB))
-        {
-          edgesSiteB = new List<VoronoiDiagram.Edge>();
-          polygonEdges.Add(edge.SiteB.Position, edgesSiteB);
-        }
-
-        edgesSiteA.Add(edge);
-        edgesSiteB.Add(edge);
-      }
-
       // Select averaged out positions for new sites
-      var relaxedSites = polygonEdges.Select((x) =>
+      var centroids = diagram.Sites.Select((site) =>
       {
-        var midpoints = x.Value.Select(y =>
+        if (!site.Edges.Any())
+          return site.Position;
+
+        // Get first edge
+        var firstEdge = site.Edges.First();
+        var vertices = new List<Vector2> { firstEdge.CornerA.Position, firstEdge.CornerB.Position };
+
+        foreach (var edge in site.Edges.Skip(1))
         {
-          return y.CornerA.Position * 0.5f + y.CornerB.Position * 0.5f;
-        }).ToList();
+          var nextVertex = (edge.CornerA.Position != vertices.Last() ? edge.CornerA : edge.CornerB);
 
-        float coeff = 1.0f / midpoints.Count();
-
-        var acc = Vector2.Zero;
-
-        foreach (var midpoint in midpoints)
-        {
-          acc += coeff * midpoint;
+          if (nextVertex.Position == vertices.First())
+            break;
+          else
+            vertices.Add(nextVertex.Position);
         }
 
-        return acc;
+        return GetCentroid(vertices);
       });
 
-      return GenerateDiagram(relaxedSites.ToList(), extents);
+      return GenerateDiagram(centroids.ToList(), extents);
+    }
+
+    /// <summary>
+    /// Get the centroid of a non-complex polygon: https://stackoverflow.com/a/16841009
+    /// (dunno if it's right tbh but it looks fine)
+    /// </summary>
+    /// <param name="vertices">The vertices of the polygon in order</param>
+    /// <returns>The centroid</returns>
+    public static Vector2 GetCentroid(IList<Vector2> vertices)
+    {
+      float x = 0.0f;
+      float y = 0.0f;
+      float area = 0.0f;
+      var lastVertex = vertices.Last();
+
+      foreach (var curVertex in vertices)
+      {
+        float det = curVertex.Y * lastVertex.X - curVertex.X * lastVertex.Y;
+
+        area += det;
+        x += (curVertex.X + lastVertex.X) * det;
+        y += (curVertex.Y + lastVertex.Y) * det;
+
+        lastVertex = curVertex;
+      }
+      area *= 3;
+
+      return new Vector2(x / area, y / area);
     }
   }
 }
