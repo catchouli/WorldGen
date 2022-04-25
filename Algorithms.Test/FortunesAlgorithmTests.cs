@@ -31,13 +31,13 @@ namespace Algorithms.Test
       } },
 
       // Simple 8-point test case
-      new object[] { "8 points", 24, 31, new List<Vector2> {
+      new object[] { "8 points", 18, 25, new List<Vector2> {
           new Vector2(232, 79), new Vector2(939, 210), new Vector2(316, 273), new Vector2(693, 364),
           new Vector2(1012, 454), new Vector2(394, 485), new Vector2(131, 615), new Vector2(754, 639)
       } },
 
       // Edge case where the first n points have the same Y coordinate so there are no active parabolas yet
-      new object[] { "SameYCoordinate", 26, 34, new List<Vector2>
+      new object[] { "SameYCoordinate", 20, 28, new List<Vector2>
       {
         new Vector2(232, 79), new Vector2(610, 79), new Vector2(939, 210), new Vector2(316, 273),
         new Vector2(693, 364), new Vector2(1012, 454), new Vector2(394, 485), new Vector2(131, 615),
@@ -46,10 +46,10 @@ namespace Algorithms.Test
 
       // Edge case where two points were close on n=37 and caused a weird issue where an edge would extend all the way
       // across the diagram
-      new object[] { "PointsFromSeed(908772445, 37)", 109, 145, PointsFromSeed(908772445, 37, 1024.0f, 1024.0f) },
+      new object[] { "PointsFromSeed(908772445, 37)", 76, 112, PointsFromSeed(908772445, 37, 1024.0f, 1024.0f) },
 
       // Something similar, no idea what's happening there but it has a lot of edges going everywhere over the diagram
-      new object[] { "PointsFromSeed(1380721063, 91)", 268, 358, PointsFromSeed(1380721063, 91, 1024.0f, 1024.0f) },
+      new object[] { "PointsFromSeed(1380721063, 91)", 184, 274, PointsFromSeed(1380721063, 91, 1024.0f, 1024.0f) },
     };
 
     /// <summary>

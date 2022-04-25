@@ -103,7 +103,6 @@ namespace MapGenTestApp
       var orangePen = Pens.Solid(Color.Orange, PointRadius);
       foreach (var edge in map.Voronoi.Edges)
       {
-        // TODO: fix the edge edges
         if (edge.SiteA == null || edge.SiteB == null)
           continue;
 
@@ -120,10 +119,12 @@ namespace MapGenTestApp
         image.Mutate(x => x.DrawLines(sitePens[edge.SiteA.Position], pointA - offset, pointB - offset));
         image.Mutate(x => x.DrawLines(sitePens[edge.SiteB.Position], pointA + offset, pointB + offset));
       }
+
+      // Render voronoi vertices on top
       foreach (var vertex in map.Voronoi.VoronoiVertices)
       {
         var point = new PointF(vertex.Position.X, vertex.Position.Y);
-        image.Mutate(x => x.DrawLines(Pens.Solid(Color.Green, PointRadius), point, point));
+        image.Mutate(x => x.DrawLines(Pens.Solid(Color.Green, 3.0f), point, point));
       }
 
       // Render delaunay triangulation

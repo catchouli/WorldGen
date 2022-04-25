@@ -1,4 +1,5 @@
-﻿using System.Diagnostics;
+﻿using System;
+using System.Diagnostics;
 using System.Numerics;
 using Utils;
 
@@ -277,17 +278,6 @@ namespace Algorithms.Voronoi
           if (extendedEdge.Start == extendedEdge.End)
             continue;
 
-          // Edge case: not too important but this edge might actually (and is likely to) be parallel to and connected
-          // to the last one we added, as we grow two edges out away from each other. In that case, we can actually just
-          // add it on to that one instead, and end up with a more optimal graph.
-          if (completedEdges.Any() && TryMergeAdjacentEdges(completedEdges.Last(), extendedEdge, out var mergedEdge))
-          {
-            completedEdges[completedEdges.Count - 1] = mergedEdge;
-            continue;
-          }
-
-          // Finally, just add this edge if that edge case didn't apply. Again, we can just do this anyway and end up
-          // with a slightly less optimal graph.
           completedEdges.Add(extendedEdge);
         }
       }
@@ -299,49 +289,6 @@ namespace Algorithms.Voronoi
 
       // Convert to a VoronoiDiagram and return
       return ConvertToResult(completedEdges, sites, extents);
-    }
-
-    /// <summary>
-    /// Try and merge two adjacent edges if they are parallel and share a vertex
-    /// </summary>
-    /// <param name="a">The first edge</param>
-    /// <param name="b">The second edge</param>
-    /// <param name="c">The output edge</param>
-    /// <returns>Whether the edges could be merged</returns>
-    private static bool TryMergeAdjacentEdges(CompletedEdge a, CompletedEdge b, out CompletedEdge c)
-    {
-      // Check if the edges actually share a vertex
-      if (b.Start != a.Start && b.End != a.Start &&
-        b.Start != a.End && b.End != a.End)
-      {
-        c = new CompletedEdge();
-        return false;
-      }
-
-      // Unfortunate that we have to do this vector normalizes but we don't do it that often...
-      var aDir = Vector2.Normalize(a.End - a.Start);
-      var bDir = Vector2.Normalize(b.End - b.Start);
-      var dotProduct = Vector2.Dot(aDir, bDir);
-
-      // If the direction of the two vectors is the same or opposite, the lines are parallel
-      if (!Comparison.ApproxEquals(dotProduct, 1.0f) && !Comparison.ApproxEquals(dotProduct, -1.0f))
-      {
-        c = new CompletedEdge();
-        return false;
-      }
-
-      // Now work out which edge is shared, and replace that one
-      if (a.Start == b.Start)
-        a.Start = b.End;
-      else if (a.Start == b.End)
-        a.Start = b.Start;
-      else if (a.End == b.Start)
-        a.End = b.Start;
-      else if (a.End == b.End)
-        a.End = b.End;
-
-      c = a;
-      return true;
     }
 
     /// <summary>
@@ -583,10 +530,9 @@ namespace Algorithms.Voronoi
       // Connect edge vertices on each of the four edges
       var connectVertices = (IEnumerable<VoronoiDiagram.Vertex> verticesToConnect) =>
       {
-        foreach (var pair in verticesToConnect.Zip(verticesToConnect.Skip(1)))
+        foreach (var (a, b) in verticesToConnect.Zip(verticesToConnect.Skip(1)))
         {
-          // TODO: we need to connect these new edges to the nearest site but it's tricky
-          var newEdge = new VoronoiDiagram.Edge { CornerA = pair.First, CornerB = pair.Second };
+          var newEdge = new VoronoiDiagram.Edge { CornerA = a, CornerB = b };
           edges.Add(newEdge);
           newEdge.CornerA.Edges.Add(newEdge);
           newEdge.CornerB.Edges.Add(newEdge);
@@ -600,12 +546,72 @@ namespace Algorithms.Voronoi
       connectVertices(voronoiVertices.Values.Where(m => m.Position.X == extents.Z).OrderBy(m => m.Position.Y));
       connectVertices(voronoiVertices.Values.Where(m => m.Position.Y == extents.W).OrderBy(m => m.Position.X));
 
+      // Remove redundant edges created because we grow edges out from an intersection point
+      var finalVertices = MergeRedundantEdges(voronoiVertices, edges);
+
       return new VoronoiDiagram
       {
-        VoronoiVertices = voronoiVertices.Select(x => x.Value).ToArray(),
+        VoronoiVertices = finalVertices,
         SiteVertices = siteVertices.ToArray(),
         Edges = edges.ToArray()
       };
+    }
+
+    /// <summary>
+    /// Merge redundant edges in the voronoi diagram that we get because the algorithm grows edges away from the
+    /// center of parabola intersections
+    /// </summary>
+    /// <param name="vertices">The vertices</param>
+    private static VoronoiDiagram.Vertex[] MergeRedundantEdges(Dictionary<Vector2, VoronoiDiagram.Vertex> vertices, List<VoronoiDiagram.Edge> edges)
+    {
+      var ret = new List<VoronoiDiagram.Vertex>();
+
+      foreach (var vertex in vertices.Values)
+      {
+        // If a vertex has exactly two edges and they're parallel, it's redundant and the edges can be merged
+        if (vertex.Edges.Count == 2 && AreParallel(vertex.Edges[0], vertex.Edges[1]))
+        {
+          var edgeA = vertex.Edges[0];
+          var edgeB = vertex.Edges[1];
+
+          // Merge vertex.Edges[1] into vertex.Edges[0]
+          edgeA.CornerA = (edgeA.CornerA.Position != vertex.Position ? edgeA.CornerA : edgeA.CornerB);
+          edgeA.CornerB = (edgeB.CornerA.Position != vertex.Position ? edgeB.CornerA : edgeB.CornerB);
+          edgeA.CornerB.Edges.Add(edgeA);
+
+          // And then delete vertex.Edges[1] from the graph completely
+          edgeB.CornerA.Edges.Remove(edgeB);
+          edgeB.CornerB.Edges.Remove(edgeB);
+          edges.Remove(edgeB);
+        }
+        // And if it's not redundant, add it to the output set
+        else
+        {
+          ret.Add(vertex);
+        }
+      }
+
+      return ret.ToArray();
+    }
+
+    /// <summary>
+    /// Check whether two edges are parallel
+    /// </summary>
+    /// <param name="a">The first edge</param>
+    /// <param name="b">The second edge</param>
+    /// <returns>Whether they were parallel</returns>
+    private static bool AreParallel(VoronoiDiagram.Edge a, VoronoiDiagram.Edge b)
+    {
+      // Construct unit vectors for both edges (sigh)
+      var dA = Vector2.Normalize(a.CornerA.Position - a.CornerB.Position);
+      var dB = Vector2.Normalize(b.CornerA.Position - b.CornerB.Position);
+
+      // Calculate angle between vectors to find out if they're parallel
+      float dot = dA.X * dB.X + dA.Y * dB.Y;
+      float det = dA.X * dB.Y - dA.Y * dB.X;
+      float angle = MathF.Atan2(det, dot);
+
+      return Comparison.ApproxEquals(dot, 1.0f) || Comparison.ApproxEquals(dot, -1.0f);
     }
 
     /// <summary>
